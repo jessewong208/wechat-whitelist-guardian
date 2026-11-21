@@ -61,9 +61,11 @@ agent_created: true
    ```
 2. 首次登录开发者平台（会弹出浏览器和二维码，用手机微信摄像头扫码）:
    ```
-   node <skill_dir>/scripts/dev_login.js <任意路径>/dev_login_qr.gif
+   node <skill_dir>/scripts/dev_login.js <任意路径>/dev_login_qr.png
    ```
-   登录态存在 `~/.wechat-whitelist-guardian/browser-profile/`，后续复用。
+   - **登录码也会按 `notify_channel` 推送**（本地弹窗始终兜底）：人在电脑旁就用 `local`，不在就用企微/飞书/钉钉推到远端设备屏幕，用手机摄像头扫那块屏幕。登录码用专用文案（"扫码登录开发者平台"），和授权码区分。
+   - 登录态存在 `~/.wechat-whitelist-guardian/browser-profile/`，后续复用。
+   - **登录成功后一定要让 dev_login 进程正常结束、profile 落盘**，再启动 apply；两者共用同一 profile，不能同时跑（会锁冲突）。判断"登录成功"以出现 `logged_in` 事件 + 业务页能看到「API IP白名单」为准——**别只看"二维码消失"，码过期也会消失**。
 
 **数据目录**：默认 `~/.wechat-whitelist-guardian/`（config.json / state.json / profile 都在这里）。
 可用环境变量 `WL_GUARD_HOME` 改到别处。状态与 skill 包分离，更新 skill 不会丢配置。
@@ -90,6 +92,17 @@ agent_created: true
 Webhook 模式不用装任何东西、不用登录、不用加组织；CLI 模式命令以实际 dws 版本为准，可用 `dingtalk_text_cmd`/`dingtalk_image_cmd` 配 `{text}/{image}/{target}/{title}` 占位符覆盖。任何远程渠道推送失败都会自动降级为本地弹窗，扫码链路不断。
 
 ## 核心工作流
+
+### 0. 【每次必做】先问用户：跑 skill 的这台电脑在不在身边
+
+**在启动任何扫码流程（dev_login / apply）之前，先问用户**：
+
+> 「运行 skill 的这台电脑现在在你身边吗？不在的话我把二维码发到企微/飞书/钉钉，你在能看到那台设备屏幕的地方扫。」
+
+- **在身边** → 渠道用 `local`（本地弹窗），用户扫当前屏幕
+- **不在身边** → 必须先确认渠道已配置好（见「首次配置」的推送渠道），再走远程推送；**绝不能默认本地弹窗就开跑**，否则用户对着空屏幕找不到码
+
+这是硬性前置判断。用户没回答前不要启动 dev_login/apply。登录码和授权码走同一个 `notify_channel`，一次配置全程生效。
 
 ### 1. 检查 IP 是否变化（主入口）
 
@@ -147,6 +160,11 @@ python <skill_dir>/scripts/ip_guard.py check --notify <渠道>
 - **可选 CLI**：lark-cli（飞书）/ wecom-cli（企微），需本机连接器已授权。
 - Windows 若 `dirname`/`ls` 报 command not found：Bash 里先 `export PATH="/c/Program Files/Git/usr/bin:$PATH"`。
 - 企微 `.CMD` 调用：subprocess 用 list 形式直接执行，不要包 `cmd.exe /c`；输出用 `encoding="utf-8", errors="replace"`；markdown 不要用 `> ` 前缀（被当重定向符）。
+- **Node `execFileSync` 的 `timeout` 单位是毫秒不是秒**！推送 python 子进程要写 `timeout: 180000`（=3分钟）；写成 `180` 会在 python 启动前就超时杀进程，表现为推送失败且无报错。
+- **不要给 `WL_PYTHON` 指不存在的路径**：dev_login/apply 调 notify.py 时用 `process.env.WL_PYTHON || 'python'`。不设它、用 PATH 里的 `python` 最稳；设错路径会导致推送静默失败。
+- **apply 的登录判断别用 `text=登录`**：页面上其他菜单也含"登录"二字会误判成 `need_login`。只认明确标志：URL 含 `/login`/`passport`、出现 `.login-qrcode-box` 或「请使用微信扫码登录」，且业务页 30 秒内没出现「API IP白名单」才算未登录/未加载。
+- **业务页加载要等足 30 秒**：微信开发者平台白名单数据异步加载，实测 6 秒出，慢时更久；等不到别急着判失败。
+- **dev_login 判断"已登录"不能只看二维码消失**：码过期也会消失。要确认业务页能看到「API IP白名单」或收到 `logged_in` 事件。
 
 ## 资源
 
