@@ -1,0 +1,31 @@
+{
+  "_说明": "复制本文件为 config.json 并填写。实际配置文件在用户主目录 ~/.wechat-whitelist-guardian/config.json（由 init 命令创建，不要改 skill 目录里的这份）。",
+
+  "appid": "wx你的公众号AppID",
+  "account_name": "我的公众号",
+
+  "notify_channel": "local",
+
+  "_渠道说明": "二维码推送渠道，由使用者自己选：local=电脑弹窗（默认，最可靠，手机微信/钉钉摄像头扫屏幕即可）；wecom=企业微信；feishu=飞书；dingtalk=钉钉；all=所有已配置渠道都推+本地弹窗。个人微信不开放推送API，无法程序化发图——用local弹窗后手机微信扫屏幕就是等价效果。",
+  "_企业微信": "连接 wecom-cli 并 auth init 扫码授权后，把授权人 chat_id（wo 开头）填这里",
+  "wecom_chat_id": "",
+
+  "_飞书": "连接 lark-cli 并授权后，把你的 open_id（ou 开头）填这里",
+  "feishu_open_id": "",
+
+  "_钉钉模式": "dingtalk_mode 二选一：webhook=群机器人（默认，零门槛，不用装CLI/加组织，建群→加自定义机器人→复制Webhook地址即可）；cli=官方dws命令行（企业级，需装CLI+加入组织+有权限）。",
+  "dingtalk_mode": "webhook",
+
+  "_钉钉Webhook": "webhook 模式下填群机器人 Webhook 地址（https://oapi.dingtalk.com/robot/send?access_token=...）。若机器人开了'加签'安全设置，把签名的 secret 填到 dingtalk_secret。",
+  "dingtalk_webhook": "",
+  "dingtalk_secret": "",
+
+  "_钉钉CLI": "cli 模式下才需要：target_type 填 user 或 group，target_id 填 userId 或群 openConversationId。命令模板可用 {text}/{image}/{target}/{title} 占位符；留空用默认命令，以你装的 dws 版本为准。",
+  "dingtalk_target_type": "user",
+  "dingtalk_target_id": "",
+  "dingtalk_text_cmd": "",
+  "dingtalk_image_cmd": "",
+
+  "_二维码说明": "local 渠道下用系统默认图片查看器打开二维码；none 则只保存文件不弹窗。",
+  "qr_display": "local"
+}
