@@ -63,7 +63,7 @@ function pushAuthQr(file) {
   try {
     const py = process.env.WL_PYTHON || 'python';
     execFileSync(py, [path.join(__dirname, 'notify.py'), '--image', file, '--ip', NEW_IP, '--channel', ch],
-      { encoding: 'utf-8', timeout: 180, stdio: 'ignore' });
+      { encoding: 'utf-8', timeout: 180000, stdio: 'ignore' });
     return ch;
   } catch (e) {
     return ch + '(推送失败,已本地弹窗)';
@@ -88,12 +88,18 @@ function pushAuthQr(file) {
   const page = ctx.pages()[0] || await ctx.newPage();
   const url = `https://developers.weixin.qq.com/console/product/mp/${APPID}?tab1=basicInfo&tab2=dev`;
   await page.goto(url, { waitUntil:'domcontentloaded', timeout:30000 });
-  await page.waitForFunction(() => document.body.innerText.includes('API IP白名单'), {timeout:25000}).catch(()=>{});
+  // 白名单数据通常 3-8 秒加载出来，给足 30 秒；不要用 body 里的「登录」字样判断登录态
+  await page.waitForFunction(() => document.body.innerText.includes('API IP白名单'), {timeout:30000}).catch(()=>{});
   await page.waitForTimeout(800);
 
-  // 未登录时提示
-  if ((await page.locator('text=登录').count()) > 0) {
-    writeResult({ok:false, status:'need_login', note:'开发者平台未登录，请先运行 dev_login.js 扫码登录'});
+  // 未登录判断：只认明确的扫码登录标志（二维码框 / 登录页 URL），避免误判
+  const onLoginPage = /\/login|passport|login\.html/i.test(page.url())
+    || (await page.locator('.login-qrcode-box').count()) > 0
+    || (await page.locator('text=请使用微信扫码登录').count()) > 0;
+  const hasWhitelist = (await page.locator('body').innerText()).includes('API IP白名单');
+  if (onLoginPage || !hasWhitelist) {
+    writeResult({ok:false, status:'need_login', note:'开发者平台未登录或白名单页未加载，请先运行 dev_login.js 扫码登录',
+      url: page.url(), hasWhitelist});
     await ctx.close();
     process.exit(1);
   }
