@@ -8,8 +8,12 @@
 个人微信无推送 API，用 local 弹窗后手机微信扫屏幕即可。
 
 用法:
+    # 白名单变化提醒（默认场景）
     python notify.py --image <图> --ip <新IP> [--old-ip <旧IP>]
                      [--channel wecom|feishu|dingtalk|local|all] [--no-image]
+    # 开发者平台登录码推送（文案不同，不需要 --ip）
+    python notify.py --image <图> --scene login
+                     [--channel wecom|feishu|dingtalk|local|all]
 """
 from __future__ import annotations
 
@@ -98,6 +102,17 @@ def build_text(ip: str, old_ip: str | None, account: str) -> str:
         "微信接口会报 40164，请尽快更新白名单。\n\n"
         "让小微帮你改: 说「帮我把公众号 IP 白名单改成最新 IP」。\n\n"
         "注: 下方二维码约几分钟有效，请用摄像头扫电脑屏幕上的图。"
+    )
+
+
+def build_login_text(account: str) -> str:
+    """开发者平台登录码场景文案（与白名单提醒区分）。"""
+    return (
+        f"【{account} · 微信开发者平台登录】\n"
+        "请用手机微信摄像头扫描下方二维码登录开发者平台。\n\n"
+        "重要: 请用摄像头对着显示此图的屏幕扫，相册/长按识别无效。\n"
+        "二维码约几分钟有效，过期请让小微重新抓取。\n\n"
+        "登录成功后小微会自动继续办理后续步骤。"
     )
 
 
@@ -271,10 +286,12 @@ def send_dingtalk(text: str, image: Path | None, cfg: dict) -> dict:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="推送 IP 变化与二维码（渠道可选）")
+    parser = argparse.ArgumentParser(description="推送 IP 变化/登录码与二维码（渠道可选）")
     parser.add_argument("--image")
-    parser.add_argument("--ip", required=True)
+    parser.add_argument("--ip", help="新 IP（scene=whitelist 时必填）")
     parser.add_argument("--old-ip")
+    parser.add_argument("--scene", choices=["whitelist", "login"], default="whitelist",
+                        help="whitelist=IP变化提醒(默认), login=开发者平台登录码")
     parser.add_argument("--channel", choices=CHANNELS, help="覆盖 config 里的 notify_channel")
     parser.add_argument("--no-image", action="store_true")
     args = parser.parse_args()
@@ -282,7 +299,13 @@ def main() -> int:
     cfg = load_config()
     channel = args.channel or cfg.get("notify_channel", "local")
     account = cfg.get("account_name", "公众号")
-    text = build_text(args.ip, args.old_ip, account)
+    if args.scene == "login":
+        text = build_login_text(account)
+    else:
+        if not args.ip:
+            print(json.dumps({"ok": False, "error": "scene=whitelist 需要 --ip"}, ensure_ascii=False))
+            return 2
+        text = build_text(args.ip, args.old_ip, account)
     image = None if args.no_image else (Path(args.image) if args.image else None)
     if image and not image.exists():
         print(json.dumps({"ok": False, "error": f"图片不存在: {image}"}, ensure_ascii=False))
