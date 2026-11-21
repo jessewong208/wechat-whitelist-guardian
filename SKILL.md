@@ -2,7 +2,7 @@
 name: wechat-whitelist-guardian
 slug: wechat-whitelist-guardian-jessewong208
 displayName: 公众号IP白名单助手
-version: 1.0.0
+version: 1.0.1
 license: MIT
 summary: 动态IP导致公众号报40164时，自动检测新IP、扫码登录开发者平台、填白名单并回读确认；需开启Agent操控浏览器，运行前先问电脑是否在身边，不在则配置聊天工具把二维码发到其他终端
 display_name: 公众号IP白名单助手
