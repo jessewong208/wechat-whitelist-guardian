@@ -1,6 +1,10 @@
 ---
 name: wechat-whitelist-guardian
+slug: wechat-whitelist-guardian-jessewong208
+displayName: 公众号IP白名单守护
 version: 1.0.0
+license: MIT
+summary: 动态IP导致公众号报40164时，自动检测新IP、扫码登录微信开发者平台、填白名单并回读确认
 display_name: 公众号IP白名单守护
 display_name_en: WeChat Official Account IP Whitelist Guardian
 description: |
