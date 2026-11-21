@@ -15,7 +15,7 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 
 const OUT = process.argv[2];
 const HOME = process.env.WL_GUARD_HOME || path.join(os.homedir(), '.wechat-whitelist-guardian');
@@ -44,6 +44,29 @@ function showImageLocally(file) {
     else spawn('xdg-open', [file], { detached: true, stdio: 'ignore' }).unref();
     return true;
   } catch (e) { return false; }
+}
+
+function readConfig() {
+  try { return JSON.parse(fs.readFileSync(path.join(HOME, 'config.json'), 'utf8')); }
+  catch (e) { return {}; }
+}
+
+/** 按 config 的 notify_channel 推送登录码；本地弹窗始终保留兜底。 */
+function pushLoginQr(file) {
+  const cfg = readConfig();
+  const ch = cfg.notify_channel || 'local';
+  showImageLocally(file);  // 兜底：先本地弹窗（若本机在身边可直接扫）
+  if (ch === 'local' || ch === 'none') return ch;
+  try {
+    const py = process.env.WL_PYTHON || 'python';
+    // --scene login 用登录专用文案，不带 --ip
+    execFileSync(py, [path.join(__dirname, 'notify.py'), '--image', file,
+      '--scene', 'login', '--channel', ch],
+      { encoding: 'utf-8', timeout: 180000, stdio: 'ignore' });
+    return ch;
+  } catch (e) {
+    return ch + '(推送失败,已本地弹窗)';
+  }
 }
 
 (async () => {
@@ -77,9 +100,10 @@ function showImageLocally(file) {
   });
   if (!b64) { console.log(JSON.stringify({ok:false, error:'未找到登录二维码'})); await ctx.close(); process.exit(1); }
   fs.writeFileSync(OUT, Buffer.from(b64.split(',')[1], 'base64'));
-  showImageLocally(OUT);
+  const pushed = pushLoginQr(OUT);
   console.log(JSON.stringify({ ok: true, qr_path: OUT, bytes: fs.statSync(OUT).size,
-    chrome: exe, note: '请用手机微信摄像头扫屏幕上显示的二维码登录开发者平台' }));
+    channel: pushed, chrome: exe,
+    note: '登录码已按配置渠道推送（本地弹窗兜底）。请用手机微信摄像头对着显示二维码的屏幕扫，相册识别无效' }));
 
   let done = false;
   const timer = setInterval(async () => {
