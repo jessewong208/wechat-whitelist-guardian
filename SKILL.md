@@ -1,28 +1,35 @@
 ---
 name: wechat-whitelist-guardian
 slug: wechat-whitelist-guardian-jessewong208
-displayName: 公众号IP白名单守护
+displayName: 公众号IP白名单助手
 version: 1.0.0
 license: MIT
-summary: 动态IP导致公众号报40164时，自动检测新IP、扫码登录微信开发者平台、填白名单并回读确认
-display_name: 公众号IP白名单守护
+summary: 动态IP导致公众号报40164时，自动检测新IP、扫码登录开发者平台、填白名单并回读确认；需开启Agent操控浏览器，运行前先问电脑是否在身边，不在则配置聊天工具把二维码发到其他终端
+display_name: 公众号IP白名单助手
 display_name_en: WeChat Official Account IP Whitelist Guardian
 description: |
   监测公网出口 IP 变化，处理微信公众号 API 白名单报错（errcode 40164）。
   支持扫码登录微信开发者平台、自动填写新 IP、推送管理员授权码、扫码后回读确认。
+  使用前需在 WorkBuddy 设置→智能体 开启「浏览器操控」并给浏览器装扩展，让 Agent 能操控浏览器。
+  运行前会先询问运行本技能的电脑是否在身边：不在则通过企业微信/飞书/钉钉把二维码推送到其他终端，用手机摄像头扫屏登录。
   Use when the user mentions 公众号IP白名单、IP变了、40164、动态IP、公众号又报40164、
   改白名单、确认公众号IP是否白名单、WeChat official account IP whitelist.
 description_zh: |
   动态 IP 变化导致微信公众号接口报 40164 时，自动检测公网 IP、抓登录二维码、扫码登录微信开发者平台、
   自动填写新 IP 并弹出管理员授权码，扫码后回读确认白名单是否生效。适合家用宽带动态 IP 的公众号运营者。
+  前置：需在 WorkBuddy「设置→智能体」开启浏览器操控（让 Agent 能操控电脑和浏览器）并给浏览器装 WorkBuddy 扩展。
+  运行前会先询问运行本技能的电脑是否在身边；若不在，需先配置企业微信/飞书/钉钉，把二维码推送到身边其他终端的屏幕上，再用手机摄像头扫码登录。
 description_en: |
   Detects public IP changes that cause WeChat Official Account API error 40164. Captures the login QR code,
   logs in to the WeChat Developer Platform, fills in the new IP automatically, shows the admin authorization
   QR code, and reads back the whitelist to confirm. Ideal for operators on dynamic home broadband IPs.
+  Requires enabling browser control in WorkBuddy settings (Agent controls the browser) and installing the browser extension.
+  Before each run it asks whether the computer running this skill is nearby; if not, configure WeCom/Feishu/DingTalk
+  to push the QR code to another terminal for phone-camera scanning.
 agent_created: true
 ---
 
-# 公众号IP白名单守护
+# 公众号IP白名单助手
 
 ## 用途
 
