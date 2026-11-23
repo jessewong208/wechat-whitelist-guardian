@@ -2,11 +2,14 @@
  * 自动修改公众号 API IP 白名单（微信开发者平台）+ 管理员授权扫码流程（通用版）。
  * 需要已用 dev_login.js 扫码登录过开发者平台（登录态存 profile）。
  *
- * 流程: 填新IP → 确定 → 抓"管理员扫码授权"二维码 → 本地弹窗显示 → 等扫码 → 回读确认
- * 用法: node apply_whitelist.js <AppID> <新IP> <二维码输出路径.png>
+ * 流程: 填新IP → 确定 → 弹"管理员扫码授权"二维码 → 等扫码 → 回读确认
+ * 用法: node apply_whitelist.js <AppID> <新IP> <二维码输出路径.png> [--local]
+ *   --local  电脑在身边：授权码就在已打开的浏览器窗口里，不弹图片查看器、不推送任何 IM。
+ *            电脑不在身边时不加此参数：抓码存图并按 config 渠道推送到远端屏幕。
  * 结果写入 <二维码路径>.result.json
  *
  * 环境变量:
+ *   WL_GUARD_LOCAL  设为 1 等价于 --local
  *   WL_GUARD_HOME   自定义数据目录（默认 ~/.wechat-whitelist-guardian）
  *   CHROME_PATH     自定义 Chrome/Edge 路径
  */
@@ -19,6 +22,8 @@ const { spawn, execFileSync } = require('child_process');
 const APPID = process.argv[2];
 const NEW_IP = process.argv[3];
 const OUT_PNG = process.argv[4];
+// 电脑在身边：授权码就在浏览器弹窗里，不推 IM、不弹图片查看器
+const LOCAL = process.argv.includes('--local') || process.env.WL_GUARD_LOCAL === '1';
 const RESULT = OUT_PNG + '.result.json';
 const HOME = process.env.WL_GUARD_HOME || path.join(os.homedir(), '.wechat-whitelist-guardian');
 const PROFILE = path.join(HOME, 'browser-profile');
@@ -54,8 +59,14 @@ function readConfig() {
   catch (e) { return {}; }
 }
 
-/** 按 config 的 notify_channel 推送授权码；本地弹窗始终保留兜底。 */
+/**
+ * 授权码显示策略：
+ * - LOCAL（电脑在身边）：什么都不做——授权对话框就在浏览器页面里，脚本已把窗口置前；
+ *   既不弹图片查看器，也不推 IM。
+ * - 非 LOCAL（电脑不在身边）：按 config 渠道推送到远端屏幕；本地弹窗仅作兜底。
+ */
 function pushAuthQr(file) {
+  if (LOCAL) return 'browser';
   const cfg = readConfig();
   const ch = cfg.notify_channel || 'local';
   showImageLocally(file);  // 兜底：先本地弹窗
@@ -116,9 +127,12 @@ function pushAuthQr(file) {
 
   const authDlg = page.locator('.weui-desktop-dialog:visible').filter({hasText:'管理员扫码授权'}).first();
   const authCount = await page.locator('.weui-desktop-dialog:visible').filter({hasText:'管理员扫码授权'}).count();
-  writeResult({ok:false, status:'waiting_scan', old_ip:oldIp, target_ip:NEW_IP, auth_dialog:authCount>0});
+  writeResult({ok:false, status:'waiting_scan', old_ip:oldIp, target_ip:NEW_IP,
+    auth_dialog:authCount>0, qr_channel: LOCAL ? 'browser' : 'remote'});
 
   if (authCount > 0) {
+    // 让浏览器窗口置前，用户直接扫页面里的授权码
+    await page.bringToFront().catch(()=>{});
     const b64 = await authDlg.locator('img').evaluateAll(imgs => {
       const q = imgs.map(i=>i.src).find(s=>s.startsWith('data:image/') && s.length>1000);
       return q || null;
@@ -127,7 +141,8 @@ function pushAuthQr(file) {
       fs.writeFileSync(OUT_PNG, Buffer.from(b64.split(',')[1], 'base64'));
       pushAuthQr(OUT_PNG);
     } else {
-      writeResult({ok:false, status:'no_qr_found', note:'授权弹窗未找到二维码图片'});
+      // 没存到图也不影响 LOCAL 模式——页面里本来就显示授权码
+      if (!LOCAL) writeResult({ok:false, status:'no_qr_found', note:'授权弹窗未找到二维码图片'});
     }
   }
 
