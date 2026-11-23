@@ -1,12 +1,15 @@
 /**
  * 微信开发者平台扫码登录（通用版）。
- * 打开 platform → 点登录 → 提取二维码图片 → 存文件 → 本地弹窗显示 → 保持窗口等扫码。
+ * 打开 platform → 点登录 → 显示二维码 → 保持窗口等扫码。
  * 登录态存入用户主目录下的 profile，后续脚本复用。
  *
- * 用法: node dev_login.js <二维码输出路径.gif>
+ * 用法: node dev_login.js <二维码输出路径.gif> [--local]
+ *   --local  电脑在身边：二维码就在已打开的浏览器窗口里，不弹图片查看器、不推送任何 IM。
+ *            电脑不在身边时不加此参数：抓码存图并按 config 渠道推送到远端屏幕。
  * 输出 JSON 后持续运行，扫码登录成功后打印 logged_in 事件。
  *
  * 环境变量:
+ *   WL_GUARD_LOCAL  设为 1 等价于 --local
  *   WL_GUARD_HOME   自定义数据目录（默认 ~/.wechat-whitelist-guardian）
  *   CHROME_PATH     自定义 Chrome/Edge 路径
  *   NODE_PATH       playwright 所在 node_modules（本 skill 会自动探测常见位置）
@@ -18,6 +21,8 @@ const path = require('path');
 const { spawn, execFileSync } = require('child_process');
 
 const OUT = process.argv[2];
+// 电脑在身边：--local 或 WL_GUARD_LOCAL=1 → 只用浏览器窗口显示二维码，不推 IM、不弹图片查看器
+const LOCAL = process.argv.includes('--local') || process.env.WL_GUARD_LOCAL === '1';
 const HOME = process.env.WL_GUARD_HOME || path.join(os.homedir(), '.wechat-whitelist-guardian');
 const PROFILE = path.join(HOME, 'browser-profile');
 
@@ -51,11 +56,17 @@ function readConfig() {
   catch (e) { return {}; }
 }
 
-/** 按 config 的 notify_channel 推送登录码；本地弹窗始终保留兜底。 */
+/**
+ * 二维码显示策略：
+ * - LOCAL（电脑在身边）：什么都不做——浏览器窗口本身就显示着二维码，脚本已把它置前；
+ *   既不弹图片查看器，也不推 IM，避免多此一举。
+ * - 非 LOCAL（电脑不在身边）：按 config 渠道推送到远端屏幕；本地弹窗仅作兜底。
+ */
 function pushLoginQr(file) {
+  if (LOCAL) return 'browser';  // 电脑在身边：直接用浏览器窗口里的二维码
   const cfg = readConfig();
   const ch = cfg.notify_channel || 'local';
-  showImageLocally(file);  // 兜底：先本地弹窗（若本机在身边可直接扫）
+  showImageLocally(file);  // 兜底：先本地弹窗
   if (ch === 'local' || ch === 'none') return ch;
   try {
     const py = process.env.WL_PYTHON || 'python';
@@ -100,10 +111,14 @@ function pushLoginQr(file) {
   });
   if (!b64) { console.log(JSON.stringify({ok:false, error:'未找到登录二维码'})); await ctx.close(); process.exit(1); }
   fs.writeFileSync(OUT, Buffer.from(b64.split(',')[1], 'base64'));
+  // 让浏览器窗口置前，确保用户能看到页面里的二维码
+  await page.bringToFront().catch(()=>{});
   const pushed = pushLoginQr(OUT);
   console.log(JSON.stringify({ ok: true, qr_path: OUT, bytes: fs.statSync(OUT).size,
-    channel: pushed, chrome: exe,
-    note: '登录码已按配置渠道推送（本地弹窗兜底）。请用手机微信摄像头对着显示二维码的屏幕扫，相册识别无效' }));
+    channel: pushed, local: LOCAL, chrome: exe,
+    note: LOCAL
+      ? '电脑在身边：二维码已显示在浏览器窗口，请用手机微信摄像头直接扫屏幕上的码（相册识别无效）'
+      : '登录码已按配置渠道推送（本地弹窗兜底）。请用手机微信摄像头对着显示二维码的屏幕扫，相册识别无效' }));
 
   let done = false;
   const timer = setInterval(async () => {
