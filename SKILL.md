@@ -2,7 +2,7 @@
 name: wechat-whitelist-guardian
 slug: wechat-whitelist-guardian-jessewong208
 displayName: 公众号IP白名单助手
-version: 1.0.1
+version: 1.0.2
 license: MIT
 summary: 动态IP导致公众号报40164时，自动检测新IP、扫码登录开发者平台、填白名单并回读确认；需开启Agent操控浏览器，运行前先问电脑是否在身边，不在则配置聊天工具把二维码发到其他终端
 display_name: 公众号IP白名单助手
@@ -68,9 +68,10 @@ agent_created: true
    ```
 2. 首次登录开发者平台（会弹出浏览器和二维码，用手机微信摄像头扫码）:
    ```
-   node <skill_dir>/scripts/dev_login.js <任意路径>/dev_login_qr.png
+   node <skill_dir>/scripts/dev_login.js <任意路径>/dev_login_qr.png --local
    ```
-   - **登录码也会按 `notify_channel` 推送**（本地弹窗始终兜底）：人在电脑旁就用 `local`，不在就用企微/飞书/钉钉推到远端设备屏幕，用手机摄像头扫那块屏幕。登录码用专用文案（"扫码登录开发者平台"），和授权码区分。
+   - 电脑在身边就加 `--local`：二维码直接显示在浏览器窗口（脚本自动置前），不推送 IM、不弹图片查看器
+   - 电脑不在身边就不加 `--local`：登录码按 `notify_channel` 推到企微/飞书/钉钉，扫远端设备屏幕。登录码用专用文案（"扫码登录开发者平台"），和授权码区分。
    - 登录态存在 `~/.wechat-whitelist-guardian/browser-profile/`，后续复用。
    - **登录成功后一定要让 dev_login 进程正常结束、profile 落盘**，再启动 apply；两者共用同一 profile，不能同时跑（会锁冲突）。判断"登录成功"以出现 `logged_in` 事件 + 业务页能看到「API IP白名单」为准——**别只看"二维码消失"，码过期也会消失**。
 
@@ -104,12 +105,18 @@ Webhook 模式不用装任何东西、不用登录、不用加组织；CLI 模�
 
 **在启动任何扫码流程（dev_login / apply）之前，先问用户**：
 
-> 「运行 skill 的这台电脑现在在你身边吗？不在的话我把二维码发到企微/飞书/钉钉，你在能看到那台设备屏幕的地方扫。」
+> 「运行 skill 的这台电脑现在在你身边吗？在身边我就直接把二维码显示在浏览器上给你扫；不在的话我把二维码发到企微/飞书/钉钉，你在能看到那台设备屏幕的地方扫。」
 
-- **在身边** → 渠道用 `local`（本地弹窗），用户扫当前屏幕
-- **不在身边** → 必须先确认渠道已配置好（见「首次配置」的推送渠道），再走远程推送；**绝不能默认本地弹窗就开跑**，否则用户对着空屏幕找不到码
+按回答走两条**完全不同的分支**：
 
-这是硬性前置判断。用户没回答前不要启动 dev_login/apply。登录码和授权码走同一个 `notify_channel`，一次配置全程生效。
+- **在身边** → 两个脚本都加 `--local` 参数（或设 `WL_GUARD_LOCAL=1`）：
+  - 二维码/授权码**直接显示在已打开的浏览器窗口里**，脚本会把窗口置前，用户拿手机摄像头扫屏幕即可
+  - **不推送任何 IM**（企微/飞书/钉钉都不发）、**不弹图片查看器**——浏览器本身就是显示载体，多此一举反而添乱
+  - 命令示例：`node dev_login.js <输出.png> --local` / `node apply_whitelist.js <AppID> <新IP> <输出.png> --local`
+  - 此时 `notify_channel` 配什么都无所谓，`--local` 优先级最高，会跳过全部推送
+- **不在身边** → 脚本**不加** `--local`：先确认推送渠道已配好（见「首次配置」），抓码存图后按 `notify_channel` 推到远端设备屏幕，用户扫远端那块屏幕；本地弹窗仅作兜底。**绝不能默认本地弹窗就开跑**，否则用户对空屏幕找不到码
+
+这是硬性前置判断。用户没回答前不要启动 dev_login/apply。登录码和授权码走同一套分支逻辑，一次判断全程生效。
 
 ### 1. 检查 IP 是否变化（主入口）
 
@@ -130,15 +137,17 @@ python <skill_dir>/scripts/ip_guard.py check --json --verbose
 
 ```bash
 export NODE_PATH="<skill_dir>/../node_modules"   # 或指向已装 playwright 的 node_modules
-node <skill_dir>/scripts/apply_whitelist.js <AppID> <新IP> <二维码输出路径.png>
+# 电脑在身边：加 --local，授权码显示在浏览器窗口，不推送不弹图
+node <skill_dir>/scripts/apply_whitelist.js <AppID> <新IP> <二维码输出路径.png> --local
+# 电脑不在身边：不加 --local，授权码按 notify_channel 推到远端屏幕
 ```
 
 **必须用后台任务/保持进程存活的方式启动**——普通 `&` 启动会随 shell 退出，授权窗口失效导致扫码报「系统错误」。脚本自动：
 1. 进开发者平台控制台，定位「API IP白名单」，读旧 IP
 2. 点编辑 → 填新 IP → 点确定
-3. 弹「管理员扫码授权」→ 抓二维码 → 本地弹窗显示（手机摄像头扫屏幕）
+3. 弹「管理员扫码授权」→ 浏览器窗口置前显示授权码（`--local` 时）或推送到远端（非 `--local` 时），手机摄像头扫屏幕
 4. 保持进程存活轮询等授权（最多 5 分钟）
-5. 授权后重新加载页面**回读白名单**，结果写 `<二维码路径>.result.json`
+5. 授权后重新加载页面**回读白名单**，结果写 `<二维码路径>.result.json`（含 `qr_channel`: `browser` 或 `remote`）
 
 判读结果文件：`status=done && ok=true` → 白名单已改好；`waiting_scan` → 请扫码；`need_login` → 先跑 dev_login；`timeout`/`error` → 重新跑（二维码会过期，输出文件换新名字）。
 
@@ -177,8 +186,8 @@ python <skill_dir>/scripts/ip_guard.py check --notify <渠道>
 
 - `scripts/ip_guard.py` — IP 检测、状态对比、剪贴板、打开控制台、CIDR 分析、init 配置
 - `scripts/fetch_qrcode.js` — 抓公众号登录二维码原图
-- `scripts/dev_login.js` — 扫码登录开发者平台（保存 profile）
-- `scripts/apply_whitelist.js` — 自动改白名单 + 授权码 + 回读确认
+- `scripts/dev_login.js` — 扫码登录开发者平台（保存 profile；`--local` 时纯浏览器扫码不推送）
+- `scripts/apply_whitelist.js` — 自动改白名单 + 授权码 + 回读确认（`--local` 时纯浏览器扫码不推送）
 - `scripts/notify.py` — 企微/飞书/钉钉推送（渠道可选；钉钉支持 webhook 群机器人 + dws CLI 双模式；失败降级本地弹窗）
 - `scripts/config.example.json` — 配置模板（含各渠道说明）
 - `references/wechat_whitelist.md` — 白名单规则、修改路径、根治方案
